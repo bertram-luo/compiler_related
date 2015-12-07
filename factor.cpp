@@ -4,12 +4,13 @@
 
 
 // expr ::= term {{ ( '+' | '-' ) term}};
-// term ::= factor {{ ('*'|'/') factor}} ;
-// factor ::= literal | variable | (expr);
+// term ::= primary_expression {{ ('*'|'/') primary_expression}} ;
+// primary_expression::= const| identifier| string| '(' expr ')';
+// const ::= int_const; // |float_const|char_const|enumeration_const
 //  literal = [0-9] | [1-9][0-9]*
 //
-char input[]="(124+12)*7";
-enum NType{NTYPE, MUL, ADD, SUB, DIV, INT, FLOAT, EXPR};
+char input[]="(124+-12)*7";
+enum NType{NTYPE, MUL, ADD, SUB, DIV, INT, FLOAT, EXPR, STR, IDE};
 struct Node{
     NType _type;
     Node* _left;
@@ -41,7 +42,21 @@ struct Node{
 
 char* cur = input;
 Node* expr();
-Node* factor(){
+Node* int_const(){
+        char* ahead = cur;
+	if (*ahead == '-'){
+	    ++ahead;
+	}
+        while(*ahead>= '0' && *ahead<= '9') ++ahead;
+        Node* i_const = new Node();
+        i_const->_type = INT;
+        i_const->_value = (char*)malloc(sizeof(char) * (ahead - cur + 1));
+        strncpy(i_const->_value, cur, ahead - cur);
+        *(i_const->_value + (ahead - cur)) = '\0';
+	cur = ahead;
+	return i_const;
+}
+Node* primary_expression(){
     if (*cur == '('){
 	    ++cur;
             Node* fact = expr();
@@ -53,25 +68,19 @@ Node* factor(){
 	    }
 	    return fact;
     } else {
-        char* ahead = cur;
-        while(*ahead>= '0' && *ahead<= '9') ++ahead;
-        Node* fact = new Node();
-        fact->_type = INT;
-        fact->_value = (char*)malloc(sizeof(char) * (ahead - cur + 1));
-        strncpy(fact->_value, cur, ahead - cur);
-        *(fact->_value + (ahead - cur)) = '\0';
-	cur = ahead;
-	return fact;
+	if (*cur >= '0' && *cur <= '9' || *cur == '-' && *(cur + 1) >= '0' && *(cur+1) <= '9'){
+	    return int_const();
+	}
     }
 }
 Node* term(){
-    Node* root = factor();
+    Node* root = primary_expression();
     while (*cur == '*' || *cur == '/'){
 	    Node* new_root = new Node();
 	    new_root->_type = *cur == '*' ? MUL : DIV;
 	    ++cur;
 	    new_root->add_left(root);
-	    new_root->add_right(factor());
+	    new_root->add_right(primary_expression());
 	    root = new_root;
     }
     return root;
