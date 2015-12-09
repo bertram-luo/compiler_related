@@ -41,6 +41,15 @@ struct Node{
 };
 
 char* cur = input;
+void next(){
+    char* pp;
+    if (tk == '#'){//preprocessor directive
+	    while(*p != 0 && *p != '\n') ++p;
+    } else if (tk >= 'a' && tk <= 'z' || tk >= 'A' && tk <= 'Z' || tk =='_'){
+        pp = p - 1;
+	while((*p) >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z')||(*p >= '0' && *p <= '9') || *p == '_')
+    }
+}
 Node* expr();
 Node* int_const(){
         char* ahead = cur;
