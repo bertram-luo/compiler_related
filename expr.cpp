@@ -26,7 +26,7 @@ using std::stack;
 //  const := int_const | char_const | float_const | enumeration_const
 //
 //
-enum TOK_TYPE {END, L_PAR, R_PAR, POS, NEG, INC, DEC, INT, ID, ADD, SUB, MUL, DIV, EXP, SHL, SHR, LT, LE, GT, GE, EQ, NEQ, AND, XOR, OR, LAN, LOR, ASSIGN};
+enum TOK_TYPE {END, INT, ID, L_PAR, R_PAR, SINC, SDEC, POS, NEG, PINC, PDEC, LNOT, NOT, ADD, SUB, MUL, DIV, EXP, SHL, SHR, LT, LE, GT, GE, EQ, NEQ, AND, XOR, OR, LAN, LOR, ASSIGN};
 TOK_TYPE tk = END;
 struct Node;
 char* start_pos = NULL;
@@ -37,6 +37,7 @@ void error();
 void expect();
 bool is_binary(TOK_TYPE tok);
 bool is_unary(TOK_TYPE tok);
+bool is_suffix(TOK_TYPE tok);
 void pushOperator(TOK_TYPE op, stack<TOK_TYPE>& operators, stack<Node*>& operands);
 void popOperator(stack<TOK_TYPE>& operators, stack<Node*>& operands);
 TOK_TYPE unary(TOK_TYPE token);
@@ -94,9 +95,9 @@ TOK_TYPE next(){
         ++next_pos;
         while(*next_pos >= 'a' && *next_pos <= 'z' || *next_pos >= 'A' && *next_pos <= 'Z' || *next_pos == '_' || *next_pos >= '0' && *next_pos <= '9') ++ next_pos;
     } else if (*next_pos == '+'){
-        if (*(next_pos + 1) == '+'){ next_pos += 2; tk = INC;}else {++next_pos; tk = ADD;}
+        if (*(next_pos + 1) == '+'){ next_pos += 2; tk = PINC;}else {++next_pos; tk = ADD;}
     } else if (*next_pos == '-'){
-        if (*(next_pos + 1) == '-'){next_pos += 2; tk = DEC;} else {++next_pos; tk = SUB;}
+        if (*(next_pos + 1) == '-'){next_pos += 2; tk = PDEC;} else {++next_pos; tk = SUB;}
     } else if (*next_pos == '*'){++next_pos; tk = MUL;
     } else if (*next_pos == '/'){++next_pos; tk = DIV;
     } else if (*next_pos == '<') {
@@ -106,7 +107,8 @@ TOK_TYPE next(){
     } else if (*next_pos == '='){
         if (* (next_pos + 1) == '='){next_pos += 2; tk = EQ;} else {++next_pos; tk=ASSIGN;}
     } else if (*next_pos == '!'){
-        if (*(next_pos + 1) == '='){next_pos += 2; tk = NEQ;} else {++next_pos; tk = END;}
+        if (*(next_pos + 1) == '='){next_pos += 2; tk = NEQ;} else {++next_pos; tk = LNOT;}
+    } else if (*next_pos == '~'){ ++ next_pos; tk = NOT;
     } else if (*next_pos == '&'){
         if (*(next_pos + 1) == '&'){next_pos += 2; tk = LAN;} else {++next_pos; tk = AND;}
     } else if (*next_pos == '^'){++next_pos; tk = XOR;
@@ -135,7 +137,10 @@ bool is_binary(TOK_TYPE tok){
      return tok == ADD || tok == SUB || tok == MUL || tok == DIV || tok == EXP || tok == SHL || tok == SHR || tok == LT || tok == GT || tok == GE || tok == LE || tok == EQ || tok == NEQ || tok == AND || tok == XOR || tok == OR || tok == LAN || tok == LOR || tok == ASSIGN;
 }
 bool is_unary(TOK_TYPE tok){
-     return tok == NEG || tok == SUB || tok == POS || tok == INC || tok == DEC;
+     return tok == NEG || tok == SUB || tok == POS || tok == PINC || tok == PDEC || tok == NOT || tok == LNOT;
+}
+bool is_suffix(TOK_TYPE tok){
+     return tok == SINC || tok == SDEC;
 }
 Node* mkNode(TOK_TYPE token, Node* first, Node* second = NULL){
     Node* root = new Node();
@@ -173,9 +178,16 @@ void expr(stack<TOK_TYPE>& operators, stack<Node*>& operands){
 }
 void P(stack<TOK_TYPE>& operators, stack<Node*>& operands){
     TOK_TYPE next_token = next();
-    if (next_token == INT || next_token == ID){
+    if (next_token == INT || next_token == ID /*|| is_keyword(next_token)*/){
         operands.push(mkLeaf(next_token));
         consume();
+        while(is_unary(next())){
+            if (tk == PINC || tk == PDEC){
+                tk = tk == PINC ? SINC : SDEC;
+            }
+            pushOperator(unary(tk), operators, operands);
+            consume();
+        }
     } else if (next_token  == L_PAR){
         consume();
         operators.push(END);
@@ -185,6 +197,10 @@ void P(stack<TOK_TYPE>& operators, stack<Node*>& operands){
     } else if (is_unary(next_token)){
         pushOperator(unary(next_token), operators, operands);
         consume();
+        while(is_unary(next())){
+            pushOperator(unary(next()), operators, operands);
+            consume();
+        }
         P(operators, operands);
     } else {
         error();
@@ -220,20 +236,18 @@ void pushOperator(TOK_TYPE op, stack<TOK_TYPE>& operators, stack<Node*>& operand
 bool precedent_over(TOK_TYPE lhs, TOK_TYPE rhs){
     int level_lhs = precedence_level(lhs);
     int level_rhs = precedence_level(rhs);
-    if (level_rhs == 2){ // unary
-        return false;
-    }
     if (level_lhs > level_rhs){
         return true;
     } else if (level_lhs == level_rhs){
-       if (lhs == EXP || lhs == ASSIGN || lhs == INC || lhs == DEC || lhs == NEG || lhs == END) return false;
+       if (lhs == ASSIGN || lhs == PINC || lhs == PDEC || lhs == NEG || lhs == END || lhs == NOT || lhs == LNOT) return false;
        else return true;
     } else {
         return false;
     }
 }
 int precedence_level(TOK_TYPE tok){
-    if (tok == INC || tok == DEC) return 4;
+    if (tok == SINC || tok == SDEC) return 5;
+    else if (tok == PINC || tok == PDEC) return 4;
     else if (tok == MUL || tok == DIV) return 3;
     else if (tok == NEG) return 2;
     else if (tok == ADD || tok == SUB) return 1;
@@ -318,11 +332,23 @@ void print_prefix(Node* root){
     case ASSIGN:
         printf("=");
         break;
-    case INC:
+    case PINC:
         printf("++");
         break;
-    case DEC:
+    case PDEC:
         printf("--");
+        break;
+    case SINC:
+        printf("++");
+        break;
+    case SDEC:
+        printf("--");
+        break;
+    case LNOT:
+        printf("!");
+        break;
+    case NOT:
+        printf("~");
         break;
     default:
         printf("\nfucking type [%d] error[%s]\n",root->_type, root->_value);
@@ -345,9 +371,12 @@ char input[] = "a^b*c<<d>> e   <= h == 5 & 3 ^ 4 | 5 && 9";
 char input3[] = "3&&9";
 char input4[] = "a=b=c";
 char input5[] = "++----a";
+char input6[] = "--a++";
+char input7[] = "-a";
+char input8[] = "!~a++--";
 
 int main(){
-	start_pos = input5;
+	start_pos = input8;
     next_pos = start_pos;
 	print_prefix(Eparser());
 }
