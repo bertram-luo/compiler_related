@@ -1,32 +1,46 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <stack>
+#include <vector>
+using std::vector;
 using std::stack;
-//  exp := assignment_exp {, assignment_exp}
-//  assignment_exp := condition_exp | unary_exp assignment_operator assignment_exp
-//  assignment_operator := '=' | '*=' | '/=' | '%=' | '+=' | '-=' || '<<=' || '>>=' || '&=' || '^=' | '|='
-//  conditional_exp := logical_or_exp | logical_or_exp '?' exp ':' conditional_exp
-//  const_exp := conditional_exp
-//  logical_or_exp := logical_and_exp {{ '||' logical_and_exp}}
-//  logical_and_exp := inclusive_or_ex {'&&' inclusive_or_exp}
-//  inclusive_or_exp := exclusive_or_exp {'|' exclusive_or_exp}
-//  exclusive_or_exp := and_exp {'^' and_exp}
-//  and_exp := equality_exp {'&' equality_exp}
-//  equality_exp := relational_exp {('!='|'==') relational_exp}
-//  relational_exp := shift_expression {('<' | '>' | '<=' | '>=') shift_expression}
-//  shift_expression := additive_exp {('<<'| '>>') additive_exp}
-//  additive_expression := mult_exp {('+'|'-') mult_exp}
-//  mult_exp := cast_exp {('*' | '/' | '%') cast_exp}
-//  cast_exp : unary_exp | '(' type_name ')' cast_exp
-//  unary_exp := postfix_exp | '++' unary_exp | '--' unary_exp | unary_operator cast_exp | 'sizeof' unary_exp | 'sizeof' '(' type_name ')'
-//  unary_operator := '&' | '*' | '+' | '-' | '~' | '!'
-//  postfix_exp := primary_exp {'[' exp ']' | '(' ')' | '(' argument_exp_list ')' | '.' id | '->' id | '++' | '--'}
-//  primary_expression := id | const | string | '(' exp ')'
-//  argument_exp_list := assignment_exp {{, assignment_exp}}
-//  const := int_const | char_const | float_const | enumeration_const
+//TOOD type_name := spec_qualifier_list {abstract declarator} // type_name = 'int'
+//DONE  exp := assignment_exp {, assignment_exp}
+//TODO  assignment_exp := condition_exp | unary_exp assignment_operator assignment_exp
+//DONE  assignment_operator := '=' | '*=' | '/=' | '%=' | '+=' | '-=' || '<<=' || '>>=' || '&=' || '^=' | '|='
+//DONE  conditional_exp := logical_or_exp | logical_or_exp '?' exp ':' conditional_exp
+//TODO  const_exp := conditional_exp
+//DONE  logical_or_exp := logical_and_exp {{ '||' logical_and_exp}}
+//DONE  logical_and_exp := inclusive_or_ex {'&&' inclusive_or_exp}
+//DONE  inclusive_or_exp := exclusive_or_exp {'|' exclusive_or_exp}
+//DONE  exclusive_or_exp := and_exp {'^' and_exp}
+//DONE  and_exp := equality_exp {'&' equality_exp}
+//DONE  equality_exp := relational_exp {('!='|'==') relational_exp}
+//DONE  relational_exp := shift_expression {('<' | '>' | '<=' | '>=') shift_expression}
+//DONE  shift_expression := additive_exp {('<<'| '>>') additive_exp}
+//DONE  additive_expression := mult_exp {('+'|'-') mult_exp}
+//DONE  mult_exp := cast_exp {('*' | '/' | '%') cast_exp}
+//DONE  cast_exp : unary_exp | '(' type_name ')' cast_exp
+//TODO  unary_exp := postfix_exp | '++' unary_exp | '--' unary_exp | unary_operator cast_exp | 'sizeof' unary_exp | 'sizeof' '(' type_name ')'
+//DONE unary_operator := TODO '&' | TODO '*' | '+' | '-' | '~' | '!'
+//TODO  postfix_exp := primary_exp {'[' exp ']' | '(' ')' | '(' argument_exp_list ')' | '.' id | '->' id | '++' | '--'}
+//DONE  primary_expression := id | const | string | '(' exp ')'
+//TODO  argument_exp_list := assignment_exp {{, assignment_exp}}
+//DONE const := int_const | char_const |TODO float_const | TODO enumeration_const
 //
 //
-enum TOK_TYPE {END, INT, ID, L_PAR, R_PAR, SINC, SDEC, POS, NEG, PINC, PDEC, LNOT, NOT, ADD, SUB, MUL, DIV, EXP, SHL, SHR, LT, LE, GT, GE, EQ, NEQ, AND, XOR, OR, LAN, LOR, ASSIGN};
+enum TOK_TYPE {END, 
+    INT_CONST, CHAR_CONST, STRING, ID, L_PAR, R_PAR,
+    SINC, SDEC,
+    TINT, POS, NEG, PINC, PDEC, LNOT, NOT,
+    MUL, DIV, MOD,
+    ADD, SUB,
+    EXP, SHL, SHR, 
+    LT, LE, GT, GE,
+    EQ, NEQ, 
+    AND, XOR, OR,
+    LAN, LOR,
+    ASSIGN, MULASS, DIVASS, MODASS, ADDASS, SUBASS, SHLASS, SHRASS, ANDASS, XORASS, ORASS, COND, COLON};
 TOK_TYPE tk = END;
 struct Node;
 char* start_pos = NULL;
@@ -35,9 +49,12 @@ TOK_TYPE next();
 void consume();
 void error();
 void expect();
+bool is_ternary(TOK_TYPE tok);
 bool is_binary(TOK_TYPE tok);
 bool is_unary(TOK_TYPE tok);
 bool is_suffix(TOK_TYPE tok);
+bool is_type(TOK_TYPE tok);
+TOK_TYPE get_type(char* s, char* e);
 void pushOperator(TOK_TYPE op, stack<TOK_TYPE>& operators, stack<Node*>& operands);
 void popOperator(stack<TOK_TYPE>& operators, stack<Node*>& operands);
 TOK_TYPE unary(TOK_TYPE token);
@@ -49,8 +66,7 @@ void print_prefix(Node* root);
 void expr(stack<TOK_TYPE>& operators, stack<Node*>& operands);
 struct Node{
     TOK_TYPE _type;
-    Node* _left;
-    Node* _right;
+    vector<Node*>_sons;
     char* _value;
     int _n_sons;
     int num_sons(){
@@ -59,15 +75,9 @@ struct Node{
     bool has_sons(){
         return _n_sons;
     }
-    void add_left(Node* left){
-        if (left){
-	        _left = left;
-	        _n_sons ++;
-	    }
-    }
-    void add_right(Node* right){
-	    if (right){
-            _right = right;
+    void add_son(Node* son){
+        if (son){
+            _sons.push_back(son);
 	        _n_sons ++;
 	    }
     }
@@ -76,48 +86,76 @@ struct Node{
         strncpy(_value, start_pos, length);
         *(_value + length) = '\0';
     }
-    Node():_n_sons(0), _type(END), _value(NULL), _left(NULL), _right(NULL){
+    Node():_n_sons(0), _type(END), _value(NULL){
     
     }
-};
-TOK_TYPE next(){
-    if (start_pos != next_pos){
-        return tk;
+    ~Node(){
+        delete _value;
+        for(int i = 0; i < _n_sons; ++i){
+            delete _sons[i];
+        }
     }
-    while(*start_pos == ' ') ++ start_pos;
-    next_pos= start_pos;
-    if (*next_pos >= '0' && *next_pos <= '9'){
-        tk = INT;
-        ++next_pos;
-       while(*next_pos >= '0' && *next_pos <= '9') ++next_pos;
-    } else if (*next_pos >= 'a' && *next_pos <= 'z' || *next_pos >= 'A' && *next_pos <= 'Z' || *next_pos == '_'){
-        tk = ID;
-        ++next_pos;
-        while(*next_pos >= 'a' && *next_pos <= 'z' || *next_pos >= 'A' && *next_pos <= 'Z' || *next_pos == '_' || *next_pos >= '0' && *next_pos <= '9') ++ next_pos;
-    } else if (*next_pos == '+'){
-        if (*(next_pos + 1) == '+'){ next_pos += 2; tk = PINC;}else {++next_pos; tk = ADD;}
-    } else if (*next_pos == '-'){
-        if (*(next_pos + 1) == '-'){next_pos += 2; tk = PDEC;} else {++next_pos; tk = SUB;}
-    } else if (*next_pos == '*'){++next_pos; tk = MUL;
-    } else if (*next_pos == '/'){++next_pos; tk = DIV;
-    } else if (*next_pos == '<') {
-        if (*(next_pos + 1) == '<'){ next_pos += 2; tk = SHL; } else if (*(next_pos + 1) == '=') {next_pos += 2; tk = LE;} else {++next_pos; tk = LT;}
-    } else if (*next_pos == '>') {
-        if (*(next_pos + 1) == '>'){next_pos += 2; tk = SHR;} else if (*(next_pos + 1) == '=') { next_pos += 2; tk = GE;} else { ++next_pos; tk = GT;}
-    } else if (*next_pos == '='){
-        if (* (next_pos + 1) == '='){next_pos += 2; tk = EQ;} else {++next_pos; tk=ASSIGN;}
-    } else if (*next_pos == '!'){
-        if (*(next_pos + 1) == '='){next_pos += 2; tk = NEQ;} else {++next_pos; tk = LNOT;}
-    } else if (*next_pos == '~'){ ++ next_pos; tk = NOT;
-    } else if (*next_pos == '&'){
-        if (*(next_pos + 1) == '&'){next_pos += 2; tk = LAN;} else {++next_pos; tk = AND;}
-    } else if (*next_pos == '^'){++next_pos; tk = XOR;
-    } else if (*next_pos == '|'){
-        if (*(next_pos + 1) == '|'){next_pos += 2; tk = LOR;} else{++next_pos; tk = OR;}
-    } else if (*next_pos == '('){++next_pos; tk = L_PAR;
-    } else if (*next_pos == ')'){++next_pos;tk = R_PAR;
-    } else { tk = END; }
-    return tk;
+};
+bool is_binary(TOK_TYPE tok){
+     return tok == ADD || tok == SUB || tok == MUL || tok == DIV || tok == MOD|| tok == EXP
+         || tok == SHL || tok == SHR || tok == LT || tok == GT || tok == GE
+         || tok == LE || tok == EQ || tok == NEQ || tok == AND || tok == XOR 
+         || tok == OR || tok == LAN || tok == LOR
+         || tok == ASSIGN || tok == MULASS
+         || tok == DIVASS || tok == MODASS || tok == ADDASS || tok == SUBASS || tok == SHLASS
+         || tok == SHRASS || tok == ANDASS || tok == XORASS || tok == ORASS;
+}
+bool is_ternary(TOK_TYPE tok){
+    return tok == COND;
+}
+bool is_unary(TOK_TYPE tok){
+     return tok == NEG || tok == SUB || tok == POS || tok == PINC || tok == PDEC || tok == NOT || tok == LNOT
+         || tok == TINT;
+}
+bool is_suffix(TOK_TYPE tok){
+     return tok == SINC || tok == SDEC;
+}
+bool is_type(TOK_TYPE tok){
+    return tok == TINT;
+}
+TOK_TYPE get_type(char* s, char* e){
+    if (*s == 'i' && *(s+1) == 'n' && *(s+2) == 't') return TINT;
+    else return END;
+}
+bool precedent_over(TOK_TYPE lhs, TOK_TYPE rhs){
+    int level_lhs = precedence_level(lhs);
+    int level_rhs = precedence_level(rhs);
+    if (level_lhs > level_rhs){
+        return true;
+    } else if (level_lhs == level_rhs){
+       if (lhs == COND ||lhs == ASSIGN || lhs == MULASS
+               ||lhs == TINT
+         || lhs == DIVASS || lhs == MODASS || lhs == ADDASS || lhs == SUBASS || lhs == SHLASS
+         || lhs == SHRASS || lhs == ANDASS || lhs == XORASS || lhs == ORASS
+               || lhs == PINC || lhs == PDEC || lhs == NEG || lhs == END || lhs == NOT || lhs == LNOT) return false;//right associative
+       else return true;//left associative
+    } else {
+        return false;
+    }
+}
+int precedence_level(TOK_TYPE tok){
+    if (tok == SINC || tok == SDEC) return 5;
+    else if (tok == PINC || tok == PDEC || tok == NEG || tok == POS || tok == LNOT || tok == NOT || tok == TINT) return 4;
+    else if (tok == MUL || tok == DIV || tok == MOD) return 3;
+    else if (tok == ADD || tok == SUB) return 1;
+    else if (tok == SHL || tok == SHR) return 0;
+    else if (tok == LE || tok == LT || tok == GT || tok == GE) return -1;
+    else if (tok == EQ || tok == NEQ) return -2;
+    else if (tok == AND) return -3;
+    else if (tok == XOR) return -4;
+    else if (tok == OR) return -5;
+    else if (tok == LAN) return -6;
+    else if (tok == LOR) return -7;
+    else if (tok == COND || tok == ASSIGN || tok == MULASS
+         || tok == DIVASS || tok == MODASS || tok == ADDASS || tok == SUBASS || tok == SHLASS
+         || tok == SHRASS || tok == ANDASS || tok == XORASS || tok == ORASS
+            ) return -8;
+    else return -100;
 }
 void consume(){
     start_pos = next_pos;
@@ -133,21 +171,13 @@ void expect(TOK_TYPE tok){
     else
 	    error();
 }
-bool is_binary(TOK_TYPE tok){
-     return tok == ADD || tok == SUB || tok == MUL || tok == DIV || tok == EXP || tok == SHL || tok == SHR || tok == LT || tok == GT || tok == GE || tok == LE || tok == EQ || tok == NEQ || tok == AND || tok == XOR || tok == OR || tok == LAN || tok == LOR || tok == ASSIGN;
-}
-bool is_unary(TOK_TYPE tok){
-     return tok == NEG || tok == SUB || tok == POS || tok == PINC || tok == PDEC || tok == NOT || tok == LNOT;
-}
-bool is_suffix(TOK_TYPE tok){
-     return tok == SINC || tok == SDEC;
-}
-Node* mkNode(TOK_TYPE token, Node* first, Node* second = NULL){
+Node* mkNode(TOK_TYPE token, Node* first, Node* second = NULL, Node* third = NULL){
     Node* root = new Node();
     root->_type = token;
     root->ncpy(start_pos, next_pos - start_pos);
-    root->add_left(first);
-    root->add_right(second);
+    root->add_son(first);
+    root->add_son(second);
+    root->add_son(third);
     return root;
 }
 Node* mkLeaf(TOK_TYPE tok){
@@ -155,6 +185,59 @@ Node* mkLeaf(TOK_TYPE tok){
     root->_type = tok;
     root->ncpy(start_pos, next_pos - start_pos);
     return root;
+}
+TOK_TYPE next(){
+    if (start_pos != next_pos){
+        return tk;
+    }
+    while(*start_pos == ' ') ++ start_pos;
+    next_pos= start_pos;
+    if (*next_pos >= '0' && *next_pos <= '9'){
+        tk = INT_CONST;
+        ++next_pos;
+       while(*next_pos >= '0' && *next_pos <= '9') ++next_pos;
+    } else if (*next_pos >= 'a' && *next_pos <= 'z' || *next_pos >= 'A' && *next_pos <= 'Z' || *next_pos == '_'){
+        ++next_pos;
+        while(*next_pos >= 'a' && *next_pos <= 'z' || *next_pos >= 'A' && *next_pos <= 'Z' || *next_pos == '_' || *next_pos >= '0' && *next_pos <= '9')++ next_pos;
+        if ((tk = get_type(start_pos, next_pos)) == END) tk = ID;
+    } else if (*next_pos == '\''){
+        ++next_pos; tk = CHAR_CONST;
+        if (*next_pos == '\\') {++next_pos;}++next_pos;
+        if (*next_pos == '\''){ ++ next_pos; }else {error(/*"missing closing single quotion mark"*/);}
+    } else if (*next_pos == '\"'){
+        ++next_pos; tk = STRING;
+        while (*next_pos != '\0' && *next_pos != '\"') { if (*next_pos == '\\'){++next_pos;}++next_pos;}
+        if (*next_pos == '"'){ ++ next_pos; }else {error(/*"missing closing double quotion mark"*/);}
+    } else if (*next_pos == '+'){
+        if (*(next_pos + 1) == '+'){ next_pos += 2; tk = PINC;}else {++next_pos; tk = ADD;}
+    } else if (*next_pos == '-'){
+        if (*(next_pos + 1) == '-'){next_pos += 2; tk = PDEC;} else {++next_pos; tk = SUB;}
+    } else if (*next_pos == '*'){
+        if (*(next_pos + 1) == '='){next_pos +=2; tk = MULASS;}else {++next_pos; tk = MUL;}
+    } else if (*next_pos == '/'){
+        if (*(next_pos + 1) == '='){next_pos +=2; tk = DIVASS;}else {++next_pos; tk = DIV;}
+    } else if (*next_pos == '%'){
+        if (*(next_pos + 1) == '='){next_pos +=2; tk = MODASS;}else {++next_pos; tk = MOD;}
+    } else if (*next_pos == '<') {
+        if (*(next_pos + 1) == '<'){ next_pos += 2; tk = SHL;} else if (*(next_pos + 1) == '=') {next_pos += 2; tk = LE;} else {++next_pos; tk = LT;}
+    } else if (*next_pos == '>') {
+        if (*(next_pos + 1) == '>'){next_pos += 2; tk = SHR;} else if (*(next_pos + 1) == '=') { next_pos += 2; tk = GE;} else { ++next_pos; tk = GT;}
+    } else if (*next_pos == '='){
+        if (* (next_pos + 1) == '='){next_pos += 2; tk = EQ;} else {++next_pos; tk=ASSIGN;}
+    } else if (*next_pos == '!'){
+        if (*(next_pos + 1) == '='){next_pos += 2; tk = NEQ;} else {++next_pos; tk = LNOT;}
+    } else if (*next_pos == '~'){ ++ next_pos; tk = NOT;
+    } else if (*next_pos == '&'){
+        if (*(next_pos + 1) == '&'){next_pos += 2; tk = LAN;} else {++next_pos; tk = AND;}
+    } else if (*next_pos == '^'){++next_pos; tk = XOR;
+    } else if (*next_pos == '|'){
+        if (*(next_pos + 1) == '|'){next_pos += 2; tk = LOR;} else{++next_pos; tk = OR;}
+    } else if (*next_pos == '('){++next_pos; tk = L_PAR;
+    } else if (*next_pos == ')'){++next_pos; tk = R_PAR;
+    } else if (*next_pos == '?'){++next_pos; tk = COND;
+    } else if (*next_pos == ':'){++next_pos; tk = COLON;
+    } else { tk = END; }
+    return tk;
 }
 Node* Eparser(){
     stack<TOK_TYPE> operators;
@@ -166,10 +249,17 @@ Node* Eparser(){
 }
 void expr(stack<TOK_TYPE>& operators, stack<Node*>& operands){
     P(operators, operands);
-    while(is_binary(next())){
+
+    while(is_binary(next()) || is_ternary(next())){
+        auto next_tok = next();
         pushOperator(next(), operators, operands);
         consume();
         P(operators, operands);
+        if (is_ternary(next_tok)){
+            next();
+            consume();
+            P(operators, operands);
+        }
     }
     printf("%d %d %d\n", operators.size(), operands.size(), operators.top());
     while(operators.top() != END){
@@ -178,7 +268,7 @@ void expr(stack<TOK_TYPE>& operators, stack<Node*>& operands){
 }
 void P(stack<TOK_TYPE>& operators, stack<Node*>& operands){
     TOK_TYPE next_token = next();
-    if (next_token == INT || next_token == ID /*|| is_keyword(next_token)*/){
+    if (next_token == INT_CONST || next_token == ID  || next_token == CHAR_CONST || next_token == STRING /*|| is_keyword(next_token)*/){
         operands.push(mkLeaf(next_token));
         consume();
         while(is_unary(next())){
@@ -190,10 +280,17 @@ void P(stack<TOK_TYPE>& operators, stack<Node*>& operands){
         }
     } else if (next_token  == L_PAR){
         consume();
-        operators.push(END);
-        expr(operators, operands);
-        expect(R_PAR);
-        operators.pop();
+        if (is_type(next())){
+            pushOperator(next(), operators, operands);
+            consume();
+            expect(R_PAR);
+            P(operators, operands);
+        }else {
+            operators.push(END);
+            expr(operators, operands);
+            expect(R_PAR);
+            operators.pop();
+        }
     } else if (is_unary(next_token)){
         pushOperator(unary(next_token), operators, operands);
         consume();
@@ -212,16 +309,19 @@ TOK_TYPE unary(TOK_TYPE token){// TODO check logic
 }
 void popOperator(stack<TOK_TYPE>& operators, stack<Node*>& operands){
    if (is_binary(operators.top())) {
-       auto t1 = operands.top();
-       operands.pop();
-       auto t0 = operands.top();
-       operands.pop();
+       auto t1 = operands.top(); operands.pop();
+       auto t0 = operands.top(); operands.pop();
        operands.push(mkNode(operators.top(), t0, t1));
        operators.pop();
-   } else {
-       auto res = mkNode(operators.top(), operands.top());
-       operands.pop();
+   } else if (is_ternary(operators.top())) {
+       auto t2 = operands.top(); operands.pop();
+       auto t1 = operands.top(); operands.pop();
+       auto t0 = operands.top(); operands.pop();
+       operands.push(mkNode(operators.top(), t0, t1, t2));
        operators.pop();
+   } else{
+       auto res = mkNode(operators.top(), operands.top());
+       operands.pop(); operators.pop();
        operands.push(res);
    }
 }
@@ -233,39 +333,19 @@ void pushOperator(TOK_TYPE op, stack<TOK_TYPE>& operators, stack<Node*>& operand
     }
     operators.push(op);
 }
-bool precedent_over(TOK_TYPE lhs, TOK_TYPE rhs){
-    int level_lhs = precedence_level(lhs);
-    int level_rhs = precedence_level(rhs);
-    if (level_lhs > level_rhs){
-        return true;
-    } else if (level_lhs == level_rhs){
-       if (lhs == ASSIGN || lhs == PINC || lhs == PDEC || lhs == NEG || lhs == END || lhs == NOT || lhs == LNOT) return false;
-       else return true;
-    } else {
-        return false;
-    }
-}
-int precedence_level(TOK_TYPE tok){
-    if (tok == SINC || tok == SDEC) return 5;
-    else if (tok == PINC || tok == PDEC) return 4;
-    else if (tok == MUL || tok == DIV) return 3;
-    else if (tok == NEG) return 2;
-    else if (tok == ADD || tok == SUB) return 1;
-    else if (tok == SHL || tok == SHR) return 0;
-    else if (tok == LE || tok == LT || tok == GT || tok == GE) return -1;
-    else if (tok == EQ || tok == NEQ) return -2;
-    else if (tok == AND) return -3;
-    else if (tok == XOR) return -4;
-    else if (tok == OR) return -5;
-    else if (tok == LAN) return -6;
-    else if (tok == LOR) return -7;
-    else if (tok == ASSIGN) return -8;
-    else return -100;
-}
 void print_prefix(Node* root){
     if (!root) return;
     int num_sons = root->num_sons();
     switch(root->_type){
+    case TINT:
+        printf("int");
+        break;
+    case STRING:
+        printf("%s", root->_value);
+        break;
+    case CHAR_CONST:
+        printf("%s", root->_value);
+        break;
     case MUL:
 		printf("*");
 		break;
@@ -278,7 +358,7 @@ void print_prefix(Node* root){
 	case SUB:
 		printf("-");
 		break;
-	case INT:
+	case INT_CONST:
 		printf("%s", root->_value);
 		break;
     case ID:
@@ -286,6 +366,9 @@ void print_prefix(Node* root){
         break;
     case EXP:
         printf("^");
+        break;
+    case MOD:
+        printf("%%");
         break;
     case NEG:
         printf("-");
@@ -332,6 +415,39 @@ void print_prefix(Node* root){
     case ASSIGN:
         printf("=");
         break;
+    case MULASS:
+        printf("*=");
+        break;
+    case DIVASS:
+        printf("/=");
+        break;
+    case MODASS:
+        printf("%%=");
+        break;
+    case ADDASS:
+        printf("+=");
+        break;
+    case SUBASS:
+        printf("-=");
+        break;
+    case SHLASS:
+        printf("<=");
+        break;
+    case SHRASS:
+        printf(">=");
+        break;
+    case ANDASS:
+        printf("&=");
+        break;
+    case XORASS:
+        printf("^=");
+        break;
+    case ORASS:
+        printf("|=");
+        break;
+    case COND:
+        printf("?:");
+        break;
     case PINC:
         printf("++");
         break;
@@ -356,13 +472,11 @@ void print_prefix(Node* root){
     }
     if (num_sons){
         printf("(");
-	    print_prefix(root->_left);
-    }
-    if (num_sons > 1){
-        printf(",");
-        print_prefix(root->_right);
-    }
-    if (num_sons){
+	    print_prefix(root->_sons[0]);
+        for(int i = 1; i < num_sons; ++i){
+            printf(",");
+            print_prefix(root->_sons[i]);
+        }
 	    printf(")");
     }
 }
@@ -374,9 +488,15 @@ char input5[] = "++----a";
 char input6[] = "--a++";
 char input7[] = "-a";
 char input8[] = "!~a++--";
+char input9[] = "c%=a%b";
+char input10[] = "c = '\''";
+char input11[] = "c = \"fuck your mother\"";
+char input12[] = "(int)(int) a";
 
+Node* root = nullptr;
 int main(){
-	start_pos = input8;
+	start_pos = input12;
     next_pos = start_pos;
-	print_prefix(Eparser());
+    root = Eparser();
+	print_prefix(root);
 }
