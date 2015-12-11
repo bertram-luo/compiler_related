@@ -21,17 +21,17 @@ using std::stack;
 //DONE  additive_expression := mult_exp {('+'|'-') mult_exp}
 //DONE  mult_exp := cast_exp {('*' | '/' | '%') cast_exp}
 //DONE  cast_exp : unary_exp | '(' type_name ')' cast_exp
-//TODO  unary_exp := postfix_exp | '++' unary_exp | '--' unary_exp | unary_operator cast_exp | 'sizeof' unary_exp | 'sizeof' '(' type_name ')'
+//DONE unary_exp := postfix_exp | '++' unary_exp | '--' unary_exp | unary_operator cast_exp |TODO 'sizeof' unary_exp |TODO 'sizeof' '(' type_name ')'
 //DONE unary_operator := TODO '&' | TODO '*' | '+' | '-' | '~' | '!'
 //TODO  postfix_exp := primary_exp {'[' exp ']' | '(' ')' | '(' argument_exp_list ')' | '.' id | '->' id | '++' | '--'}
 //DONE  primary_expression := id | const | string | '(' exp ')'
-//TODO  argument_exp_list := assignment_exp {{, assignment_exp}}
+//DONE argument_exp_list := assignment_exp {{, assignment_exp}}
 //DONE const := int_const | char_const |TODO float_const | TODO enumeration_const
 //
 //
 enum TOK_TYPE {END, 
-    INT_CONST, CHAR_CONST, STRING, ID, L_PAR, R_PAR,
-    SINC, SDEC,
+    INT_CONST, CHAR_CONST, STRING, ID, L_PAR, R_PAR, L_BR, R_BR, L_CBR, R_CBR,
+    SINC, SDEC, FUNC, IDX,
     TINT, POS, NEG, PINC, PDEC, LNOT, NOT,
     MUL, DIV, MOD,
     ADD, SUB,
@@ -40,7 +40,9 @@ enum TOK_TYPE {END,
     EQ, NEQ, 
     AND, XOR, OR,
     LAN, LOR,
-    ASSIGN, MULASS, DIVASS, MODASS, ADDASS, SUBASS, SHLASS, SHRASS, ANDASS, XORASS, ORASS, COND, COLON};
+    ASSIGN, MULASS, DIVASS, MODASS, ADDASS, SUBASS, SHLASS, SHRASS, ANDASS, XORASS, ORASS, COND, COLON,
+    COMMA
+};
 TOK_TYPE tk = END;
 struct Node;
 char* start_pos = NULL;
@@ -97,7 +99,8 @@ struct Node{
     }
 };
 bool is_binary(TOK_TYPE tok){
-     return tok == ADD || tok == SUB || tok == MUL || tok == DIV || tok == MOD|| tok == EXP
+     return  tok == FUNC || tok == COMMA || tok == IDX
+         || tok == ADD || tok == SUB || tok == MUL || tok == DIV || tok == MOD|| tok == EXP
          || tok == SHL || tok == SHR || tok == LT || tok == GT || tok == GE
          || tok == LE || tok == EQ || tok == NEQ || tok == AND || tok == XOR 
          || tok == OR || tok == LAN || tok == LOR
@@ -109,8 +112,10 @@ bool is_ternary(TOK_TYPE tok){
     return tok == COND;
 }
 bool is_unary(TOK_TYPE tok){
-     return tok == NEG || tok == SUB || tok == POS || tok == PINC || tok == PDEC || tok == NOT || tok == LNOT
-         || tok == TINT;
+     return tok == NEG || tok == SUB /*? ?*/|| tok == POS || tok == PINC || tok == PDEC || tok == NOT || tok == LNOT
+         || tok == TINT
+         || tok == L_PAR// for func call
+     || tok == L_BR;//for IDX TODO make a is_suffix function
 }
 bool is_suffix(TOK_TYPE tok){
      return tok == SINC || tok == SDEC;
@@ -139,7 +144,7 @@ bool precedent_over(TOK_TYPE lhs, TOK_TYPE rhs){
     }
 }
 int precedence_level(TOK_TYPE tok){
-    if (tok == SINC || tok == SDEC) return 5;
+    if (tok == SINC || tok == SDEC || tok == FUNC || tok == IDX) return 5;
     else if (tok == PINC || tok == PDEC || tok == NEG || tok == POS || tok == LNOT || tok == NOT || tok == TINT) return 4;
     else if (tok == MUL || tok == DIV || tok == MOD) return 3;
     else if (tok == ADD || tok == SUB) return 1;
@@ -155,10 +160,12 @@ int precedence_level(TOK_TYPE tok){
          || tok == DIVASS || tok == MODASS || tok == ADDASS || tok == SUBASS || tok == SHLASS
          || tok == SHRASS || tok == ANDASS || tok == XORASS || tok == ORASS
             ) return -8;
+    else if (tok == COMMA) return -9;
     else return -100;
 }
 void consume(){
     start_pos = next_pos;
+    tk = END;
 }
 void error(){
     printf("fucking error");
@@ -234,8 +241,11 @@ TOK_TYPE next(){
         if (*(next_pos + 1) == '|'){next_pos += 2; tk = LOR;} else{++next_pos; tk = OR;}
     } else if (*next_pos == '('){++next_pos; tk = L_PAR;
     } else if (*next_pos == ')'){++next_pos; tk = R_PAR;
+    } else if (*next_pos == '['){++next_pos; tk = L_BR;
+    } else if (*next_pos == ']'){++next_pos; tk = R_BR;
     } else if (*next_pos == '?'){++next_pos; tk = COND;
     } else if (*next_pos == ':'){++next_pos; tk = COLON;
+    } else if (*next_pos == ','){++next_pos; tk = COMMA;
     } else { tk = END; }
     return tk;
 }
@@ -261,7 +271,6 @@ void expr(stack<TOK_TYPE>& operators, stack<Node*>& operands){
             P(operators, operands);
         }
     }
-    printf("%d %d %d\n", operators.size(), operands.size(), operators.top());
     while(operators.top() != END){
         popOperator(operators, operands);
     }
@@ -271,12 +280,40 @@ void P(stack<TOK_TYPE>& operators, stack<Node*>& operands){
     if (next_token == INT_CONST || next_token == ID  || next_token == CHAR_CONST || next_token == STRING /*|| is_keyword(next_token)*/){
         operands.push(mkLeaf(next_token));
         consume();
-        while(is_unary(next())){
-            if (tk == PINC || tk == PDEC){
+        while(is_unary(next())){ // postfix unary operator
+            if (next() == PINC || next() == PDEC){
                 tk = tk == PINC ? SINC : SDEC;
+                pushOperator(unary(tk), operators, operands);
+                consume();
+            } else {
+                while (next() == L_PAR || next() == L_BR){
+                    if (next() == L_PAR){
+                        pushOperator(FUNC, operators, operands);
+                        consume();
+                        if (next() == R_PAR){
+                            operands.push(mkLeaf(END)); 
+                            consume();
+                        } else {
+                            operators.push(END);
+                            expr(operators, operands);
+                            expect(R_PAR);
+                           operators.pop();
+                        }
+                    } else {
+                        pushOperator(IDX, operators, operands);
+                        consume();
+                        if (next() == R_BR){
+                            operands.push(mkLeaf(END)); 
+                            consume();
+                        } else {
+                            operators.push(END);
+                            expr(operators, operands);
+                            expect(R_BR);
+                           operators.pop();
+                        }
+                    }
+                }
             }
-            pushOperator(unary(tk), operators, operands);
-            consume();
         }
     } else if (next_token  == L_PAR){
         consume();
@@ -291,7 +328,7 @@ void P(stack<TOK_TYPE>& operators, stack<Node*>& operands){
             expect(R_PAR);
             operators.pop();
         }
-    } else if (is_unary(next_token)){
+    } else if (is_unary(next_token)){//prefix unary operator
         pushOperator(unary(next_token), operators, operands);
         consume();
         while(is_unary(next())){
@@ -319,7 +356,7 @@ void popOperator(stack<TOK_TYPE>& operators, stack<Node*>& operands){
        auto t0 = operands.top(); operands.pop();
        operands.push(mkNode(operators.top(), t0, t1, t2));
        operators.pop();
-   } else{
+   } else {
        auto res = mkNode(operators.top(), operands.top());
        operands.pop(); operators.pop();
        operands.push(res);
@@ -337,6 +374,17 @@ void print_prefix(Node* root){
     if (!root) return;
     int num_sons = root->num_sons();
     switch(root->_type){
+    case COMMA:
+        break;
+    case END:
+        printf("NULL");
+        break;
+    case FUNC:
+        printf("CALL", root->_value);
+        break;
+    case IDX:
+        printf("[]");
+        break;
     case TINT:
         printf("int");
         break;
@@ -492,10 +540,12 @@ char input9[] = "c%=a%b";
 char input10[] = "c = '\''";
 char input11[] = "c = \"fuck your mother\"";
 char input12[] = "(int)(int) a";
+char input13[] = "fuck(a, b, c, d)";
+char input14[] = "fuck[a, b, c, d]";
 
 Node* root = nullptr;
 int main(){
-	start_pos = input12;
+	start_pos = input14;
     next_pos = start_pos;
     root = Eparser();
 	print_prefix(root);
